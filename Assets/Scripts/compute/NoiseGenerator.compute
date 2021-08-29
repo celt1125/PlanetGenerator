@@ -1,0 +1,41 @@
+#pragma kernel CSMain
+#include "../Includes/NoiseFunctions.cginc"
+#include "../Includes/PerlinNoise.cginc"
+static const int THREAD_GROUP_SIZE = 512;
+
+StructuredBuffer<float3> vertices;
+RWStructuredBuffer<float> noise;
+int vertices_num;
+
+// multiplier=1
+float multiplier;
+
+// layers=4, frequency=1, amplitude=1, lacunarity>=1, persistence<=1
+int layers;
+float4 parameters; // frequency, amplitude, lacunarity, persistence
+float land_multiplier;
+
+float ocean_depth;
+float ocean_multiplier;
+float ocean_smoothness;
+
+// power>=1, gain>=1, smoothness=1
+int ridged_layers;
+float4 ridged_parameters; // frequency, amplitude, lacunarity, persistence
+float4 ridged_parameters2; // ridged_power, ridged_gain, ridged_smoothness;
+
+[numthreads(THREAD_GROUP_SIZE,1,1)]
+void CSMain(uint id: SV_DispatchThreadID){
+	if (id < (uint)vertices_num){
+		float res = 0;
+		float land_shape = SimplexNoise(vertices[id], layers, parameters.x, parameters.y, parameters.z, parameters.w) * land_multiplier;
+		land_shape = SmoothMax(land_shape, -ocean_depth, ocean_smoothness);
+		
+		float ridged_noise = SmoothedRidgedNoise(vertices[id], ridged_layers, ridged_parameters.x, ridged_parameters.y, ridged_parameters.z,
+									ridged_parameters.w, ridged_parameters2.x, ridged_parameters2.y, ridged_parameters2.z);
+		
+		res += land_shape + ridged_noise;
+		
+		noise[id] = 1 + res * multiplier;
+	}
+}
